@@ -108,6 +108,33 @@
             background: #fcfcfd;
         }
 
+        .sticky-column {
+            position: sticky;
+            background: var(--card);
+            z-index: 2;
+        }
+
+        .sticky-column.case {
+            background: var(--subhead);
+        }
+
+        .sticky-column.num {
+            background: #fafafa;
+        }
+
+        .sticky-column.extra {
+            background: #fcfcfd;
+        }
+
+        thead .sticky-column {
+            background: var(--head);
+            z-index: 4;
+        }
+
+        .sticky-column-edge {
+            box-shadow: 1px 0 0 var(--line), 10px 0 18px rgba(17, 24, 39, 0.08);
+        }
+
         .muted {
             color: var(--muted);
             font-size: 14px;
@@ -171,7 +198,7 @@
             <table>
                 <thead>
                 <tr>
-                    <th>Case</th>
+                    <th data-sticky-columns="1">Case</th>
                     <th>Meaning / common prepositions</th>
                     <th>Number</th>
                     <th>Masculine</th>
@@ -377,5 +404,112 @@
     </div>
 
 </div>
+<script>
+    (function () {
+        function getStickyCount(table) {
+            const firstHeaderCell = table.tHead && table.tHead.rows[0] && table.tHead.rows[0].cells[0];
+            const rawValue = firstHeaderCell && firstHeaderCell.getAttribute("data-sticky-columns");
+            const stickyCount = Number.parseInt(rawValue || "0", 10);
+            return Number.isFinite(stickyCount) && stickyCount > 0 ? stickyCount : 0;
+        }
+
+        function mapLogicalColumns(table) {
+            const cells = [];
+            const occupied = [];
+            let columnCount = 0;
+
+            Array.from(table.rows).forEach(function (row, rowIndex) {
+                occupied[rowIndex] = occupied[rowIndex] || [];
+                let columnIndex = 0;
+
+                Array.from(row.cells).forEach(function (cell) {
+                    while (occupied[rowIndex][columnIndex]) {
+                        columnIndex += 1;
+                    }
+
+                    const colSpan = cell.colSpan || 1;
+                    const rowSpan = cell.rowSpan || 1;
+                    const startColumn = columnIndex;
+                    const endColumn = startColumn + colSpan;
+
+                    for (let r = rowIndex; r < rowIndex + rowSpan; r += 1) {
+                        occupied[r] = occupied[r] || [];
+                        for (let c = startColumn; c < endColumn; c += 1) {
+                            occupied[r][c] = true;
+                        }
+                    }
+
+                    cells.push({
+                        cell: cell,
+                        startColumn: startColumn,
+                        endColumn: endColumn
+                    });
+
+                    columnIndex = endColumn;
+                    columnCount = Math.max(columnCount, endColumn);
+                });
+            });
+
+            return { cells: cells, columnCount: columnCount };
+        }
+
+        function getColumnWidths(table, columnCount) {
+            const widths = new Array(columnCount).fill(0);
+            const firstRow = table.rows[0];
+
+            if (!firstRow) {
+                return widths;
+            }
+
+            let columnIndex = 0;
+            Array.from(firstRow.cells).forEach(function (cell) {
+                const colSpan = cell.colSpan || 1;
+                const width = cell.getBoundingClientRect().width / colSpan;
+
+                for (let c = 0; c < colSpan; c += 1) {
+                    widths[columnIndex + c] = width;
+                }
+
+                columnIndex += colSpan;
+            });
+
+            return widths;
+        }
+
+        function applyStickyColumns(table) {
+            const stickyCount = getStickyCount(table);
+            const mappedTable = mapLogicalColumns(table);
+            const columnWidths = getColumnWidths(table, mappedTable.columnCount);
+            const offsets = new Array(mappedTable.columnCount).fill(0);
+
+            for (let i = 1; i < offsets.length; i += 1) {
+                offsets[i] = offsets[i - 1] + columnWidths[i - 1];
+            }
+
+            mappedTable.cells.forEach(function (entry) {
+                entry.cell.classList.remove("sticky-column", "sticky-column-edge");
+                entry.cell.style.left = "";
+
+                if (stickyCount > 0 && entry.startColumn < stickyCount) {
+                    entry.cell.classList.add("sticky-column");
+                    entry.cell.style.left = offsets[entry.startColumn] + "px";
+
+                    if (entry.endColumn >= stickyCount) {
+                        entry.cell.classList.add("sticky-column-edge");
+                    }
+                }
+            });
+        }
+
+        function syncStickyColumns() {
+            document.querySelectorAll(".table-scroll table").forEach(function (table) {
+                applyStickyColumns(table);
+            });
+        }
+
+        window.addEventListener("load", syncStickyColumns);
+        window.addEventListener("resize", syncStickyColumns);
+    }());
+</script>
 </body>
 </html>
